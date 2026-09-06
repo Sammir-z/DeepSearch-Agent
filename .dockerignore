@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.git
+.venv
+.uv-cache
+.pnpm-store
+node_modules
+frontend/node_modules
+frontend/dist
+app/output
+updated
+__pycache__
+*.py[cod]

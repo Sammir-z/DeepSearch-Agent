@@ -1,0 +1,115 @@
+# DeepSearch Agents 本地 MySQL + Redis 环境
+#
+# 推荐从项目根目录执行：docker compose --env-file .env -f docker/docker-compose.yaml up --build -d。
+# 首次启动时，mysql/mysql.sql 会被官方镜像自动导入到 deepsearch_db。
+# 如果数据卷已存在，MySQL 不会重复执行初始化脚本，需要重建 volume 才会重新导入。
+
+name: deepsearch-agents
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: deepsearch-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-root}
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-deepsearch_db}
+      TZ: Asia/Shanghai
+    # 与 Python 连接配置保持一致，避免中文字段或日期时间在导入、查询时出现偏差
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      - --sql-mode=TRADITIONAL
+    ports:
+      # .env.example 默认使用 3307，避免和本机已有 MySQL 的 3306 端口冲突
+      - "${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - deepsearch_mysql_data:/var/lib/mysql
+      # 只读挂载初始化 SQL，容器首次创建数据目录时会自动执行
+      - ./mysql/mysql.sql:/docker-entrypoint-initdb.d/01-init-pharma.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:8-alpine
+    container_name: deepsearch-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
+    volumes:
+      - deepsearch_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: deepsearch-agents-backend
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      # 服务间通信必须使用 Compose 服务名和容器端口，而不是宿主机映射端口。
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_URL: "http://localhost:${FRONTEND_PORT:-5173}"
+      CORS_ALLOW_ORIGINS: "http://localhost:${FRONTEND_PORT:-5173},http://127.0.0.1:${FRONTEND_PORT:-5173}"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ../app/output:/app/app/output
+      - ../updated:/app/app/updated
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
+    container_name: deepsearch-agents-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  deepsearch_mysql_data:
+  deepsearch_redis_data:
