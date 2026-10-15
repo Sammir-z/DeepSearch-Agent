@@ -12,6 +12,7 @@
 - [五、测试类别四：真实大模型端到端评测（Live E2E Agent Evaluation）](#五测试类别四真实大模型端到端评测live-e2e-agent-evaluation)
 - [六、测试类别五：Bad Case 归因与回归防劣化闭环](#六测试类别五bad-case-归因与回归防劣化闭环)
 - [七、模型替换与上线准入门禁（Go/No-Go Gate）](#七模型替换与上线准入门禁gono-go-gate)
+- [八、专项评测：双引擎 RAG 检索与拒答评测（RAG Retrieval & Abstention Eval）](#八专项评测双引擎-rag-检索与拒答评测rag-retrieval--abstention-eval)
 
 ---
 
@@ -113,16 +114,19 @@ OK
 4. `edge_fallback`: 负样本与优雅降级（查不存在的数据，验证重试上限与数据缺口声明）；
 5. `security_guardrail`: 安全防线（SQL 慢查询防爆追加 `LIMIT`、目录逃逸拦截、记忆投毒防御）。
 
-### 3. 测试命令
+### 3. 测试命令与日志落盘
 ```powershell
 uv run python tests/evals/run_eval_benchmark.py
 ```
+> [!NOTE]
+> 运行日志将自动持久化至项目根目录下的 **`log/evals/agent_benchmark.log`**。
 
 ### 4. 预期输出看板与上线准入判定
 ```text
 ================================================================================
 🚀 DeepSearch Agent 模型替换与行为回归评测 (Evaluation Benchmark)
 📦 评测集样本数: 12 用例 | 数据集路径: dataset.json
+📝 详细日志路径: D:\面试项目\deepsearch-agents\log\evals\agent_benchmark.log
 ================================================================================
 [✅ PASS] TC-ROUTE-001       | single_source_routing      | 公开网络搜索单源路由 (通过)
 [✅ PASS] TC-ROUTE-002       | single_source_routing      | 业务结构化数据库单源路由 (通过)
@@ -162,10 +166,12 @@ security_guardrail            : 5/5 [██████████] 100.0%
 - **脱离外部复杂依赖**：脚本采用轻量内存检查点（`MemorySaver`），在本地没有启动 Redis/MySQL 容器时，也能随时发起大模型全链路压测；
 - **动态轨迹拦截**：在 `agent.astream(...)` 流式输出中，监听大模型真实的子任务分派（`task` 工具调用）与文件生成工具，实时打印调用参数摘要。
 
-### 3. 测试命令
+### 3. 测试命令与日志落盘
 ```powershell
 uv run python tests/evals/run_live_agent_eval.py
 ```
+> [!NOTE]
+> 真实大模型调用轨迹与耗时日志将同步持久化至 **`log/evals/agent_live_eval.log`**。
 
 ### 4. 现场真实实测日志示例
 以用例 `TC-ROUTE-002`（查询数据库中当前库存不足50件的药品）为例：
@@ -220,3 +226,18 @@ uv run python tests/evals/run_live_agent_eval.py
 | **单任务 Token 成本** | **$\ge 40\%$** | 达到降本目标 |
 
 *满足上述全部标准后，评测看板将亮起 `🟢 GO (准予上线)`，系统方可进入生产环境小流量灰度观察期。*
+
+---
+
+## 八、专项评测：双引擎 RAG 检索与拒答评测（RAG Retrieval & Abstention Eval）
+
+针对本项目中 **MySQLAgent（结构化数据召回）** 与 **RAGFlow 知识库（非结构化向量切片召回）** 的双引擎 RAG 检索质量、排序效果与负样本应拒尽拒能力，项目设立了专项评测体系：
+
+- **评测指标**：`Recall@5`、`Hit Rate@5`、`MRR@5`、`NRR (负样本拒答准确率)`、`FRR (正样本误拒率)` 与 `Context Relevance`；
+- **运行命令**：
+  ```powershell
+  uv run python docs/RAG_test/run_rag_eval.py
+  ```
+- **日志持久化**：日志自动落盘至 **`log/RAG/rag_eval.log`**；
+- **完整使用与评测指南**：请查阅与本指南并列的专属文档 👉 [README_RAG_TEST.md](README_RAG_TEST.md)。
+

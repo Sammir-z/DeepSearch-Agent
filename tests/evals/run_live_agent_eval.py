@@ -44,6 +44,30 @@ from app.tools.pdf_tools import convert_md_to_pdf
 from deepagents import create_deep_agent
 from tests.evals.evaluator import validate_trajectory_contracts
 
+import logging
+
+# 日志输出配置：根目录下的 log/evals/agent_live_eval.log
+log_dir = project_root / "log" / "evals"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file_path = log_dir / "agent_live_eval.log"
+
+logger = logging.getLogger("Live_Agent_Eval")
+logger.setLevel(logging.INFO)
+if logger.hasHandlers():
+    logger.handlers.clear()
+
+file_handler = logging.FileHandler(str(log_file_path), mode="a", encoding="utf-8")
+file_handler.setLevel(logging.INFO)
+file_formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s")
+file_handler.setFormatter(file_formatter)
+logger.addHandler(file_handler)
+
+
+def log_print(msg: str = ""):
+    print(msg, flush=True)
+    logger.info(msg)
+
+
 # 子智能体类型别名双向映射
 SUBAGENT_ALIAS_MAP = {
     "tavily": ["network_search_agent", "tavily", "网络搜索助手"],
@@ -76,10 +100,10 @@ async def evaluate_single_live_case(agent, case: dict) -> dict:
     name = case["name"]
     query = case["query"]
 
-    print("\n" + "=" * 80, flush=True)
-    print(f"🧪 [真实 Agent 运行] {case_id} - {name}", flush=True)
-    print(f"📝 用户输入: {query}", flush=True)
-    print("-" * 80, flush=True)
+    log_print("\n" + "=" * 80)
+    log_print(f"🧪 [真实 Agent 运行] {case_id} - {name}")
+    log_print(f"📝 用户输入: {query}")
+    log_print("-" * 80)
 
     thread_id = f"eval-{case_id.lower()}-{int(time.time())}"
     config = {"configurable": {"thread_id": thread_id}}
@@ -109,22 +133,22 @@ async def evaluate_single_live_case(agent, case: dict) -> dict:
                         tool_name = tc.get("name", "")
                         args = tc.get("args", {})
                         tool_sequence.append(tool_name)
-                        print(f"  ⚡ [实时工具调用] 节点: {node_name} | 工具: {tool_name} | 参数摘要: {str(args)[:60]}...", flush=True)
+                        log_print(f"  ⚡ [实时工具调用] 节点: {node_name} | 工具: {tool_name} | 参数摘要: {str(args)[:60]}...")
 
                         # 如果是委派子智能体任务
                         if tool_name == "task" and "subagent_type" in args:
                             sub_type = str(args["subagent_type"]).lower()
                             selected_subagents.append(sub_type)
-                            print(f"  🤖 [实时委派子智能体] -> {sub_type}", flush=True)
+                            log_print(f"  🤖 [实时委派子智能体] -> {sub_type}")
 
                 # 记录最终文本输出
                 if hasattr(last_msg, "content") and last_msg.content:
                     final_response = last_msg.content
 
         duration = time.perf_counter() - start_time
-        print(f"⏱️ 真实执行耗时: {duration:.2f}s", flush=True)
+        log_print(f"⏱️ 真实执行耗时: {duration:.2f}s")
         if final_response:
-            print(f"📄 最终响应摘要 (前150字):\n{final_response.strip()[:150]}...", flush=True)
+            log_print(f"📄 最终响应摘要 (前150字):\n{final_response.strip()[:150]}...")
 
         # 真实行为断言
         eval_passed = True
@@ -153,7 +177,7 @@ async def evaluate_single_live_case(agent, case: dict) -> dict:
                 fail_reasons.append(f"实际委派 [{selected_subagents}] 未命中预期 [{expected_subs}]")
 
         status_str = "✅ PASS" if eval_passed else f"❌ FAIL ({'; '.join(fail_reasons)})"
-        print(f"🎯 真实评测判定: {status_str}", flush=True)
+        log_print(f"🎯 真实评测判定: {status_str}")
 
         return {
             "case_id": case_id,
@@ -166,7 +190,7 @@ async def evaluate_single_live_case(agent, case: dict) -> dict:
 
     except Exception as e:
         duration = time.perf_counter() - start_time
-        print(f"💥 真实运行异常崩溃: {e}", flush=True)
+        log_print(f"💥 真实运行异常崩溃: {e}")
         return {
             "case_id": case_id,
             "passed": False,
@@ -178,10 +202,11 @@ async def evaluate_single_live_case(agent, case: dict) -> dict:
 
 
 async def main():
-    print("=" * 80, flush=True)
-    print("🚀 启动 DeepSearch Agent 真实大模型端到端评测 (Live E2E Evaluation)", flush=True)
-    print("   连接模型: DeepSeek-V4-Flash | 检查点: In-Memory Checkpointer", flush=True)
-    print("=" * 80, flush=True)
+    log_print("=" * 80)
+    log_print("🚀 启动 DeepSearch Agent 真实大模型端到端评测 (Live E2E Evaluation)")
+    log_print("   连接模型: DeepSeek-V4-Flash | 检查点: In-Memory Checkpointer")
+    log_print(f"   详细日志: {log_file_path}")
+    log_print("=" * 80)
 
     dataset_path = Path(__file__).parent / "dataset.json"
     with open(dataset_path, "r", encoding="utf-8") as f:
@@ -200,15 +225,15 @@ async def main():
         res = await evaluate_single_live_case(agent, c)
         results.append(res)
 
-    print("\n" + "=" * 80, flush=True)
-    print("📋 真实端到端评测汇总", flush=True)
-    print("-" * 80, flush=True)
+    log_print("\n" + "=" * 80)
+    log_print("📋 真实端到端评测汇总")
+    log_print("-" * 80)
     for r in results:
         status = "✅ PASS" if r["passed"] else "❌ FAIL"
         tools_summary = " -> ".join(r["tool_sequence"]) if r["tool_sequence"] else "无工具调用"
         subs_summary = ", ".join(r["selected_subagents"]) if r["selected_subagents"] else "无委派"
-        print(f"[{status}] {r['case_id']} | 耗时: {r['duration']:.2f}s | 委派助手: {subs_summary} | 轨迹: {tools_summary}", flush=True)
-    print("=" * 80, flush=True)
+        log_print(f"[{status}] {r['case_id']} | 耗时: {r['duration']:.2f}s | 委派助手: {subs_summary} | 轨迹: {tools_summary}")
+    log_print("=" * 80)
 
 
 if __name__ == "__main__":

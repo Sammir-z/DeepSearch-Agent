@@ -182,7 +182,9 @@ Docker 模式下前端默认使用同源的 `/api` 和 `/ws`，无需填写这�
 
 ## 测试与评测体系
 
-项目构建了涵盖**基础物理契约、系统集成、离线自动化基准评测与真实大模型端到端压测**的完整测试体系。详细指南与各类别运行说明请参阅 👉 **[README_TEST.md](README_TEST.md)**。
+项目构建了涵盖**基础物理契约、系统集成、离线自动化基准评测、真实大模型端到端压测以及双引擎 RAG 专项评测**的完整测试体系：
+- 完整测试体系与 Bad Case 归因指南 👉 **[README_TEST.md](README_TEST.md)**
+- 双引擎 RAG 检索与拒答评测专项指南 👉 **[README_RAG_TEST.md](README_RAG_TEST.md)**
 
 ### 常用测试命令
 
@@ -196,14 +198,19 @@ Docker 模式下前端默认使用同源的 `/api` 和 `/ws`，无需填写这�
   uv run python -m unittest tests/evals/test_regression_evals.py
   ```
 
-- **离线自动化评测基准与上线准入判定**（自动输出通过率雷达与 Go/No-Go Gate）：
+- **离线自动化评测基准与上线准入判定**（自动输出通过率雷达与 Go/No-Go Gate，日志持久化至 `log/evals/agent_benchmark.log`）：
   ```bash
   uv run python tests/evals/run_eval_benchmark.py
   ```
 
-- **真实大模型端到端评测**（真实向大模型发起网络请求，截获 tool_calls 轨迹）：
+- **真实大模型端到端评测**（真实向大模型发起网络请求，截获 tool_calls 轨迹，日志持久化至 `log/evals/agent_live_eval.log`）：
   ```bash
   uv run python tests/evals/run_live_agent_eval.py
+  ```
+
+- **双引擎 RAG 检索与拒答专项评测**（覆盖 50 条金标用例，测试 Recall@5、MRR、NRR 拒答率，日志持久化至 `log/RAG/rag_eval.log`）：
+  ```bash
+  uv run python docs/RAG_test/run_rag_eval.py
   ```
 
 ## 构建与配置检查
@@ -239,8 +246,12 @@ deepsearch-agents/
 │   ├── frontend.Dockerfile
 │   ├── nginx.conf
 │   └── mysql/mysql.sql
-├── docs/               # 设计方案和项目文档
-├── tests/              # 后端测试
+├── docs/               # 设计方案和项目文档（包含 docs/RAG_test/ 评测套件）
+├── log/                # 测试与运行日志归档（log/RAG/ 与 log/evals/）
+├── tests/              # 后端测试与评估基准
+├── README.md           # 项目主文档
+├── README_TEST.md      # 测试体系与 Bad Case 闭环指南
+├── README_RAG_TEST.md  # 双引擎 RAG 检索与拒答评测指南
 ├── .env.example
 └── pyproject.toml
 ```

@@ -25,6 +25,8 @@ project_root = Path(__file__).resolve().parents[2]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+import logging
+
 from tests.evals.evaluator import (
     validate_memory_safety,
     validate_path_sandbox,
@@ -32,6 +34,22 @@ from tests.evals.evaluator import (
     validate_subagent_routing,
     validate_trajectory_contracts,
 )
+
+# 日志输出配置：根目录下的 log/evals/agent_benchmark.log
+log_dir = project_root / "log" / "evals"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file_path = log_dir / "agent_benchmark.log"
+
+logger = logging.getLogger("Agent_Benchmark")
+logger.setLevel(logging.INFO)
+if logger.hasHandlers():
+    logger.handlers.clear()
+
+file_handler = logging.FileHandler(str(log_file_path), mode="a", encoding="utf-8")
+file_handler.setLevel(logging.INFO)
+file_formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s")
+file_handler.setFormatter(file_formatter)
+logger.addHandler(file_handler)
 
 
 def run_benchmark(dataset_path: Path | None = None) -> dict:
@@ -41,10 +59,15 @@ def run_benchmark(dataset_path: Path | None = None) -> dict:
     with open(dataset_path, "r", encoding="utf-8") as f:
         cases = json.load(f)
 
-    print("=" * 80)
-    print("🚀 DeepSearch Agent 模型替换与行为回归评测 (Evaluation Benchmark)")
-    print(f"📦 评测集样本数: {len(cases)} 用例 | 数据集路径: {dataset_path.name}")
-    print("=" * 80)
+    start_msg = f"""
+================================================================================
+🚀 DeepSearch Agent 模型替换与行为回归评测 (Evaluation Benchmark)
+📦 评测集样本数: {len(cases)} 用例 | 数据集路径: {dataset_path.name}
+📝 详细日志路径: {log_file_path}
+================================================================================
+"""
+    print(start_msg.strip())
+    logger.info(start_msg.strip())
 
     results = []
     bad_cases = []
@@ -155,35 +178,44 @@ def run_benchmark(dataset_path: Path | None = None) -> dict:
                 "reason": reason,
             })
 
-        print(f"[{status_icon}] {case_id.ljust(18)} | {category.ljust(26)} | {name} ({reason})")
+        line_msg = f"[{status_icon}] {case_id.ljust(18)} | {category.ljust(26)} | {name} ({reason})"
+        print(line_msg)
+        logger.info(line_msg)
 
     elapsed = time.time() - start_time
     total_cases = len(cases)
     passed_cases = total_cases - len(bad_cases)
     pass_rate = (passed_cases / total_cases) * 100
 
-    print("\n" + "=" * 80)
-    print("📊 评测统计看板与分项得分")
-    print("-" * 80)
+    dash_lines = [
+        "",
+        "=" * 80,
+        "📊 评测统计看板与分项得分",
+        "-" * 80,
+    ]
     for cat, stat in category_stats.items():
         cat_rate = (stat["passed"] / stat["total"]) * 100
         bar = "█" * int(cat_rate // 10) + "░" * (10 - int(cat_rate // 10))
-        print(f"{cat.ljust(30)}: {stat['passed']}/{stat['total']} [{bar}] {cat_rate:5.1f}%")
+        dash_lines.append(f"{cat.ljust(30)}: {stat['passed']}/{stat['total']} [{bar}] {cat_rate:5.1f}%")
 
-    print("-" * 80)
-    print(f"总耗时: {elapsed:.3f}s | 总体通过率: {pass_rate:.1f}% ({passed_cases}/{total_cases})")
+    dash_lines.append("-" * 80)
+    dash_lines.append(f"总耗时: {elapsed:.3f}s | 总体通过率: {pass_rate:.1f}% ({passed_cases}/{total_cases})")
 
     # 准入决策判定
     is_go = pass_rate >= 95.0 and len(bad_cases) == 0
     decision = "🟢 GO (准予上线 / 灰度放量)" if is_go else "🔴 NO-GO (拦截上线，存在阻断缺陷)"
-    print(f"上线准入决策 (Go/No-Go Gate): {decision}")
-    print("=" * 80)
+    dash_lines.append(f"上线准入决策 (Go/No-Go Gate): {decision}")
+    dash_lines.append("=" * 80)
 
     if bad_cases:
-        print("\n⚠️ Bad Case 归因与诊断清单:")
+        dash_lines.append("\n⚠️ Bad Case 归因与诊断清单:")
         for bc in bad_cases:
-            print(f"- [{bc['case_id']}] {bc['name']}: {bc['reason']}")
-            print(f"  用户指令: {bc['query']}")
+            dash_lines.append(f"- [{bc['case_id']}] {bc['name']}: {bc['reason']}")
+            dash_lines.append(f"  用户指令: {bc['query']}")
+
+    full_dash = "\n".join(dash_lines)
+    print(full_dash)
+    logger.info(full_dash)
 
     return {
         "total": total_cases,
