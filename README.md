@@ -180,13 +180,33 @@ VITE_WS_BASE_URL=ws://localhost:8000
 
 Docker 模式下前端默认使用同源的 `/api` 和 `/ws`，无需填写这两个变量。
 
-## 测试与构建
+## 测试与评测体系
 
-运行后端测试：
+项目构建了涵盖**基础物理契约、系统集成、离线自动化基准评测与真实大模型端到端压测**的完整测试体系。详细指南与各类别运行说明请参阅 👉 **[README_TEST.md](README_TEST.md)**。
 
-```bash
-uv run python -m unittest discover -s tests -p "test_*.py"
-```
+### 常用测试命令
+
+- **后端全量集成测试**（覆盖认证、会话、持久化容错与核心单测）：
+  ```bash
+  uv run python -m unittest discover -s tests -p "test_*.py"
+  ```
+
+- **基础物理契约与安全回归测试**（PDF 编译、SQL 拦截、路径防穿透、Luhn 算法）：
+  ```bash
+  uv run python -m unittest tests/evals/test_regression_evals.py
+  ```
+
+- **离线自动化评测基准与上线准入判定**（自动输出通过率雷达与 Go/No-Go Gate）：
+  ```bash
+  uv run python tests/evals/run_eval_benchmark.py
+  ```
+
+- **真实大模型端到端评测**（真实向大模型发起网络请求，截获 tool_calls 轨迹）：
+  ```bash
+  uv run python tests/evals/run_live_agent_eval.py
+  ```
+
+## 构建与配置检查
 
 构建前端：
 
